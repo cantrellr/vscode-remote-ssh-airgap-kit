@@ -11,9 +11,33 @@ The workflow intentionally treats VS Code as a release bundle:
 
 That keeps package promotion and offline deployment deterministic.
 
-## Why the commit hash matters
+## Commit resolution behavior
 
-The Remote-SSH server payload is tied to the VS Code client commit hash, not merely a marketing version string. The packager runs `code --version`, captures the commit line, and downloads the matching server tarball from the VS Code update service.
+The Remote-SSH server payload is tied to the VS Code client commit hash, not merely a marketing version string.
+
+The current packager resolves identity in this order:
+
+1. Explicit `-Commit` (authoritative if supplied)
+2. `-DownloadVsCodeInstaller` + installer URL redirect parsing
+3. `-VsCodeInstallerPath` + installer version lookup against update service
+4. `code --version` fallback (including common `code.cmd` shim locations)
+
+If no valid 40-character commit can be determined, packaging fails with a detailed error.
+
+## Server artifact options
+
+The packager supports these server payload IDs:
+
+- `server-linux-x64` (default)
+- `server-linux-arm64`
+
+Each selected artifact is downloaded as `vscode-server-<artifact>-<commit>.tar.gz`.
+
+## VSIX handling
+
+If the configured VSIX directory does not exist, the script creates it.
+
+If no VSIX files are present, packaging continues with a warning and produces a bundle containing installer + server payload + scripts/docs/templates.
 
 ## Why server preloading is done per-user
 
@@ -49,6 +73,15 @@ After offline install:
 
 4. Connect from VS Code using `Remote-SSH: Connect to Host...`.
 5. If Remote-SSH still tries to download server payloads, verify the commit in the bundle manifest matches the editor client actually running in the air-gapped network.
+
+## Repository-local transient paths
+
+Current repository conventions:
+
+- `staging/` is used for local VSIX staging.
+- `output/` is used for generated bundle folders and ZIPs.
+
+Both are intentionally ignored by Git in `.gitignore`.
 
 ## Recommended extension policy
 

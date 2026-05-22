@@ -1,25 +1,34 @@
 # VS Code Remote-SSH Air-Gap Kit
 
-This kit provides a repeatable workflow for preparing **Visual Studio Code Remote - SSH** for use in an air-gapped environment.
+This kit provides a repeatable workflow for preparing Visual Studio Code Remote - SSH for use in an air-gapped environment.
 
 ## Design target
 
-The first-pass workflow is optimized for:
+The workflow is optimized for:
 
-- **Connected staging workstation:** Windows system with Internet access and VS Code installed.
-- **Air-gapped developer workstation:** Windows system where VS Code will be installed and used.
-- **Remote targets:** Linux x64 SSH hosts, such as Ubuntu 24.04 LTS servers.
+- Connected staging workstation: Windows system with Internet access.
+- Air-gapped developer workstation: Windows system where VS Code will be installed and used.
+- Remote targets: Linux SSH hosts, with server-linux-x64 as default and optional server-linux-arm64 packaging.
 
 ## Why a bundle is needed
 
-Remote-SSH requires more than the desktop editor and the local extension. When the first SSH session is created, VS Code also needs a **version-matched VS Code Server payload** on the remote host. In an isolated network, that server payload cannot be downloaded at connection time, so it must be staged in advance.
+Remote-SSH requires more than the desktop editor and local extension. At first SSH connection, VS Code also needs a version-matched VS Code Server payload on the remote host. In an isolated network, that server payload cannot be downloaded at connection time, so it must be staged in advance.
+
+## Repository-local working folders
+
+This repository is currently configured to treat the following as generated/staging content:
+
+- staging/: source drop for downloaded VSIX files.
+- output/: generated bundle folders and ZIP artifacts.
+
+Both paths are ignored by Git in .gitignore.
 
 ## Bundle contents created by the packager
 
-The packager script creates a portable bundle like this:
+The packager creates a self-contained bundle like this:
 
 ```text
-vscode-remote-ssh-airgap-bundle/
+vscode-remote-ssh-airgap-bundle-<version>-<commit12>/
 ├── installers/
 │   └── VSCodeUserSetup-*.exe or VSCodeSetup-*.exe
 ├── vsix/
@@ -27,27 +36,28 @@ vscode-remote-ssh-airgap-bundle/
 │   ├── ms-vscode.remote-explorer*.vsix
 │   └── ms-vscode-remote.remote-ssh-edit*.vsix
 ├── servers/
-│   └── vscode-server-server-linux-x64-<commit>.tar.gz
+│   └── vscode-server-<artifact>-<commit>.tar.gz
 ├── manifest/
 │   ├── bundle-manifest.json
 │   └── SHA256SUMS.txt
+├── scripts/
+├── templates/
+├── docs/
+├── README.md
 └── README-OFFLINE-INSTALL.md
 ```
 
 ## Recommended minimum VSIX set
 
-Download these VSIX files on the connected staging workstation using **Extensions view → right-click → Download VSIX**:
+Download these VSIX files on the connected staging workstation using Extensions view -> right-click -> Download VSIX:
 
-1. `ms-vscode-remote.remote-ssh` — required Remote-SSH extension.
-2. `ms-vscode.remote-explorer` — strongly recommended UI for managing remote hosts.
-3. `ms-vscode-remote.remote-ssh-edit` — recommended syntax/intellisense support for SSH config files.
+1. ms-vscode-remote.remote-ssh (required)
+2. ms-vscode.remote-explorer (recommended)
+3. ms-vscode-remote.remote-ssh-edit (recommended)
 
-## Staging workflow
+## Build workflow
 
-1. Install the exact VS Code build you want to use in the air gap on the connected staging workstation.
-2. Download the VSIX files listed above into a folder, for example `C:\Staging\VSCode-VSIX`.
-3. Download or retain the VS Code Windows installer you plan to deploy offline.
-4. Run:
+### Option A: package from a local installer and local VSIX directory
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass -Force
@@ -57,7 +67,38 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
   -OutputDirectory 'E:\Staging\Output'
 ```
 
-5. Transfer the generated ZIP bundle into the air-gapped network.
+### Option B: repository-local production run (download installer + infer commit)
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass -Force
+$vsixDir = Join-Path $PWD 'staging\vsix'
+$outDir  = Join-Path $PWD ("output\production-" + (Get-Date -Format 'yyyyMMdd'))
+
+.\scripts\New-VSCodeRemoteSshAirgapBundle.ps1 `
+  -DownloadVsCodeInstaller `
+  -VsixDirectory $vsixDir `
+  -OutputDirectory $outDir `
+  -ServerArtifacts @('server-linux-x64') `
+  -Force
+```
+
+### Option C: explicit commit pinning
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass -Force
+.\scripts\New-VSCodeRemoteSshAirgapBundle.ps1 `
+  -Commit '<40-char-vscode-commit>' `
+  -VsCodeInstallerPath 'E:\Staging\VSCodeUserSetup-x64.exe' `
+  -VsixDirectory 'E:\Staging\VSCode-VSIX' `
+  -OutputDirectory 'E:\Staging\Output' `
+  -ServerArtifacts @('server-linux-x64','server-linux-arm64')
+```
+
+Notes:
+
+- If VsixDirectory does not exist, the script creates it.
+- If no VSIX files are present, packaging continues with a warning.
+- ServerArtifacts accepts server-linux-x64 and server-linux-arm64.
 
 ## Air-gapped client workflow
 
@@ -68,42 +109,40 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass -Force
 .\scripts\Install-VSCodeRemoteSshClientOffline.ps1 `
-  -BundleRoot '.\vscode-remote-ssh-airgap-bundle'
+  -BundleRoot '.\vscode-remote-ssh-airgap-bundle-<version>-<commit12>'
 ```
 
-This installs the VSIX files and applies practical offline settings:
+This installs VSIX files and applies offline settings:
 
-- `update.mode = none`
-- `extensions.autoUpdate = false`
-- `extensions.autoCheckUpdates = false`
+- update.mode = none
+- extensions.autoUpdate = false
+- extensions.autoCheckUpdates = false
 
 ## Air-gapped Linux target workflow
 
-Run the server preload script **as the same Linux user who will connect through Remote-SSH**:
+Run the server preload script as the same Linux user who will connect through Remote-SSH:
 
 ```bash
 chmod +x ./scripts/Install-VSCodeRemoteSshServerOffline-Linux.sh
 ./scripts/Install-VSCodeRemoteSshServerOffline-Linux.sh \
-  --bundle-root ./vscode-remote-ssh-airgap-bundle \
+  --bundle-root ./vscode-remote-ssh-airgap-bundle-<version>-<commit12> \
   --commit <commit-from-bundle-manifest>
 ```
 
-The script preloads the current Remote-SSH server path:
+Current preload path:
 
 ```text
 ~/.vscode-server/cli/servers/Stable-<commit>/server
 ```
 
-It also supports an optional legacy compatibility layout:
+Optional legacy compatibility layout:
 
 ```bash
 ./scripts/Install-VSCodeRemoteSshServerOffline-Linux.sh \
-  --bundle-root ./vscode-remote-ssh-airgap-bundle \
+  --bundle-root ./vscode-remote-ssh-airgap-bundle-<version>-<commit12> \
   --commit <commit-from-bundle-manifest> \
   --include-legacy-bin-layout
 ```
-
-That additionally populates:
 
 ```text
 ~/.vscode-server/bin/<commit>
@@ -111,16 +150,17 @@ That additionally populates:
 
 ## Operational rules that matter
 
-- **The VS Code client build, Remote-SSH extension, and VS Code Server payload should be packaged as one controlled release set.** Do not mix-and-match builds casually.
-- **Each remote target user needs the server payload staged in that user’s home directory.** Remote-SSH is per-user, not system-wide.
-- **When you update VS Code in the air gap, build a new bundle.** A new editor build usually means a new server commit hash.
-- **Ubuntu 24.04 LTS is a good fit.** Current VS Code Server builds require newer Linux runtime baselines than some older enterprise distributions.
+- Package VS Code client, Remote-SSH extensions, and server payload as one release set.
+- Stage server payload per remote Linux user account.
+- Build a new bundle whenever you update VS Code in the air-gapped environment.
 
 ## Files in this kit
 
-- `scripts/New-VSCodeRemoteSshAirgapBundle.ps1`
-- `scripts/Install-VSCodeRemoteSshClientOffline.ps1`
-- `scripts/Install-VSCodeRemoteSshServerOffline-Linux.sh`
-- `templates/settings.airgap.json`
-- `templates/ssh_config.example`
-- `docs/Implementation-Notes.md`
+- scripts/New-VSCodeRemoteSshAirgapBundle.ps1
+- scripts/Install-VSCodeRemoteSshClientOffline.ps1
+- scripts/Install-VSCodeRemoteSshServerOffline-Linux.sh
+- templates/settings.airgap.json
+- templates/ssh_config.example
+- docs/Implementation-Notes.md
+- .gitignore
+- LICENSE
