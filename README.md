@@ -49,11 +49,13 @@ vscode-remote-ssh-airgap-bundle-<version>-<commit12>/
 
 ## Recommended minimum VSIX set
 
-Download these VSIX files on the connected staging workstation using Extensions view -> right-click -> Download VSIX:
+By default, the packager downloads these VSIX packages automatically from the Visual Studio Marketplace:
 
 1. ms-vscode-remote.remote-ssh (required)
 2. ms-vscode.remote-explorer (recommended)
 3. ms-vscode-remote.remote-ssh-edit (recommended)
+
+You can override this list with `-VsixExtensionIds`.
 
 ## Build workflow
 
@@ -94,10 +96,28 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
   -ServerArtifacts @('server-linux-x64','server-linux-arm64')
 ```
 
+### Option D: custom VSIX extension list
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass -Force
+.\scripts\New-VSCodeRemoteSshAirgapBundle.ps1 `
+  -VsixExtensionIds @(
+    'ms-vscode-remote.remote-ssh',
+    'ms-vscode-remote.remote-ssh-edit'
+  ) `
+  -ServerArtifacts @('server-linux-x64')
+```
+
 Notes:
 
+- If neither VsCodeInstallerPath nor DownloadVsCodeInstaller is supplied, the script defaults to downloading the installer from InstallerUrl.
+- If VsixDirectory is omitted, the script defaults to `<repo-root>/staging/vsix`.
+- If OutputDirectory is omitted, the script defaults to `<repo-root>/output/production-YYYYMMDD`.
+- VSIX packages listed in `VsixExtensionIds` are downloaded into `VsixDirectory` before bundling.
+- To disable automatic VSIX download and use only existing local `.vsix` files, pass `-VsixExtensionIds @()`.
+- Downloads prefer `curl.exe`, then fall back to `Start-BitsTransfer`, then `Invoke-WebRequest`.
 - If VsixDirectory does not exist, the script creates it.
-- If no VSIX files are present, packaging continues with a warning.
+- If no VSIX files are present after the download step, packaging continues with a warning.
 - ServerArtifacts accepts server-linux-x64 and server-linux-arm64.
 
 ## Air-gapped client workflow
@@ -108,8 +128,7 @@ Notes:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass -Force
-.\scripts\Install-VSCodeRemoteSshClientOffline.ps1 `
-  -BundleRoot '.\vscode-remote-ssh-airgap-bundle-<version>-<commit12>'
+.\scripts\Install-VSCodeRemoteSshClientOffline.ps1
 ```
 
 This installs VSIX files and applies offline settings:
@@ -124,10 +143,10 @@ Run the server preload script as the same Linux user who will connect through Re
 
 ```bash
 chmod +x ./scripts/Install-VSCodeRemoteSshServerOffline-Linux.sh
-./scripts/Install-VSCodeRemoteSshServerOffline-Linux.sh \
-  --bundle-root ./vscode-remote-ssh-airgap-bundle-<version>-<commit12> \
-  --commit <commit-from-bundle-manifest>
+./scripts/Install-VSCodeRemoteSshServerOffline-Linux.sh
 ```
+
+By default, the Linux script auto-detects bundle root from its own location and reads commit from `manifest/bundle-manifest.json`.
 
 Current preload path:
 
@@ -138,10 +157,7 @@ Current preload path:
 Optional legacy compatibility layout:
 
 ```bash
-./scripts/Install-VSCodeRemoteSshServerOffline-Linux.sh \
-  --bundle-root ./vscode-remote-ssh-airgap-bundle-<version>-<commit12> \
-  --commit <commit-from-bundle-manifest> \
-  --include-legacy-bin-layout
+./scripts/Install-VSCodeRemoteSshServerOffline-Linux.sh --include-legacy-bin-layout
 ```
 
 ```text

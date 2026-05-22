@@ -13,6 +13,13 @@
 #     --bundle-root ./vscode-remote-ssh-airgap-bundle \
 #     --commit 0958016b2af9f09bb4257e0df4a95e2f90590f9f
 #
+# Default no-parameter mode:
+#   ./Install-VSCodeRemoteSshServerOffline-Linux.sh
+#
+# In no-parameter mode, the script uses:
+#   - bundle root: parent directory of this script
+#   - commit: value from ./manifest/bundle-manifest.json
+#
 # Optional:
 #   --include-legacy-bin-layout
 #     Also stages the older ~/.vscode-server/bin/<commit> layout.
@@ -22,6 +29,7 @@ set -euo pipefail
 BUNDLE_ROOT=""
 COMMIT=""
 INCLUDE_LEGACY=0
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 log() {
   printf '[INFO] %s\n' "$*"
@@ -44,9 +52,13 @@ usage() {
   cat <<'USAGE'
 Usage:
   Install-VSCodeRemoteSshServerOffline-Linux.sh \
-    --bundle-root <path> \
-    --commit <40-char-vscode-commit> \
+    [--bundle-root <path>] \
+    [--commit <40-char-vscode-commit>] \
     [--include-legacy-bin-layout]
+
+Defaults when omitted:
+  --bundle-root: parent directory of this script
+  --commit: read from <bundle-root>/manifest/bundle-manifest.json
 USAGE
 }
 
@@ -74,15 +86,30 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -n "$BUNDLE_ROOT" ]] || fail "--bundle-root is required."
-[[ -n "$COMMIT" ]] || fail "--commit is required."
+if [[ -z "$BUNDLE_ROOT" ]]; then
+  BUNDLE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+  log "No --bundle-root provided; defaulting to: $BUNDLE_ROOT"
+fi
+
+BUNDLE_ROOT="$(cd "$BUNDLE_ROOT" && pwd)"
+
+if [[ -z "$COMMIT" ]]; then
+  MANIFEST_PATH="$BUNDLE_ROOT/manifest/bundle-manifest.json"
+  if [[ -f "$MANIFEST_PATH" ]]; then
+    COMMIT="$(sed -nE 's/^[[:space:]]*"commit"[[:space:]]*:[[:space:]]*"([0-9a-fA-F]{40})".*/\1/p' "$MANIFEST_PATH" | head -n 1 || true)"
+    if [[ -n "$COMMIT" ]]; then
+      log "No --commit provided; using commit from manifest: ${COMMIT,,}"
+    fi
+  fi
+fi
+
+[[ -n "$COMMIT" ]] || fail "--commit was not provided and could not be read from $BUNDLE_ROOT/manifest/bundle-manifest.json."
 [[ "$COMMIT" =~ ^[0-9a-fA-F]{40}$ ]] || fail "Commit must be a 40-character hexadecimal VS Code commit hash."
 
 if [[ "$(id -u)" -eq 0 ]]; then
   warn "Running as root. Remote-SSH is normally per-user. This will preload /root/.vscode-server unless root is truly your SSH user."
 fi
 
-BUNDLE_ROOT="$(cd "$BUNDLE_ROOT" && pwd)"
 SERVER_ARCHIVE="$BUNDLE_ROOT/servers/vscode-server-server-linux-x64-${COMMIT,,}.tar.gz"
 
 if [[ ! -f "$SERVER_ARCHIVE" ]]; then

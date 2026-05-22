@@ -16,8 +16,7 @@
 
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)]
-    [ValidateScript({ Test-Path -LiteralPath $_ -PathType Container })]
+    [Parameter(Mandatory = $false)]
     [string]$BundleRoot,
 
     [Parameter(Mandatory = $false)]
@@ -111,6 +110,15 @@ function Update-VSCodeSettingsFile {
     $content = Set-OrAdd-VSCodeSetting -Content $content -Key 'extensions.autoCheckUpdates' -JsonValue 'false'
 
     Set-Content -LiteralPath $Path -Value $content -Encoding UTF8
+}
+
+if (-not $BundleRoot) {
+    $BundleRoot = Split-Path -Parent $PSScriptRoot
+    Write-Info "No -BundleRoot was provided. Defaulting to '$BundleRoot'."
+}
+
+if (-not (Test-Path -LiteralPath $BundleRoot -PathType Container)) {
+    throw "Bundle root was not found: $BundleRoot"
 }
 
 Assert-CommandAvailable -Command $CodeCommand

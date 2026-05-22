@@ -18,7 +18,7 @@ The Remote-SSH server payload is tied to the VS Code client commit hash, not mer
 The current packager resolves identity in this order:
 
 1. Explicit `-Commit` (authoritative if supplied)
-2. `-DownloadVsCodeInstaller` + installer URL redirect parsing
+2. Explicit `-DownloadVsCodeInstaller` or implicit download default when neither installer source flag is supplied
 3. `-VsCodeInstallerPath` + installer version lookup against update service
 4. `code --version` fallback (including common `code.cmd` shim locations)
 
@@ -35,9 +35,35 @@ Each selected artifact is downloaded as `vscode-server-<artifact>-<commit>.tar.g
 
 ## VSIX handling
 
+If `-VsixDirectory` is omitted, the script defaults to `<repo-root>/staging/vsix`.
+
+By default, the script downloads these extension IDs into `VsixDirectory`:
+
+- `ms-vscode-remote.remote-ssh`
+- `ms-vscode.remote-explorer`
+- `ms-vscode-remote.remote-ssh-edit`
+
+Use `-VsixExtensionIds` to override this set.
+
+To skip automatic VSIX download and only use pre-existing local VSIX files, set `-VsixExtensionIds @()`.
+
 If the configured VSIX directory does not exist, the script creates it.
 
-If no VSIX files are present, packaging continues with a warning and produces a bundle containing installer + server payload + scripts/docs/templates.
+If no VSIX files are present after the download step, packaging continues with a warning and produces a bundle containing installer + server payload + scripts/docs/templates.
+
+## Output handling
+
+If `-OutputDirectory` is omitted, the script defaults to `<repo-root>/output/production-YYYYMMDD`.
+
+## Download transport strategy
+
+For installer, VSIX, and server payload downloads, the script uses this order:
+
+1. `curl.exe`
+2. `Start-BitsTransfer`
+3. `Invoke-WebRequest`
+
+This improves performance and resilience versus relying only on `Invoke-WebRequest`.
 
 ## Why server preloading is done per-user
 
@@ -71,8 +97,8 @@ After offline install:
 ~/.vscode-server/cli/servers/Stable-<commit>/server
 ```
 
-4. Connect from VS Code using `Remote-SSH: Connect to Host...`.
-5. If Remote-SSH still tries to download server payloads, verify the commit in the bundle manifest matches the editor client actually running in the air-gapped network.
+- Connect from VS Code using `Remote-SSH: Connect to Host...`.
+- If Remote-SSH still tries to download server payloads, verify the commit in the bundle manifest matches the editor client actually running in the air-gapped network.
 
 ## Repository-local transient paths
 
@@ -82,6 +108,13 @@ Current repository conventions:
 - `output/` is used for generated bundle folders and ZIPs.
 
 Both are intentionally ignored by Git in `.gitignore`.
+
+## Offline installer defaults
+
+The bundled install scripts now support no-parameter execution from the extracted bundle root:
+
+- `./scripts/Install-VSCodeRemoteSshClientOffline.ps1` defaults `BundleRoot` to the parent directory of the script.
+- `./scripts/Install-VSCodeRemoteSshServerOffline-Linux.sh` defaults `--bundle-root` to the parent directory of the script and resolves `--commit` from `manifest/bundle-manifest.json`.
 
 ## Recommended extension policy
 
