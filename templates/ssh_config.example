@@ -1,0 +1,13 @@
+# Example OpenSSH client config for VS Code Remote-SSH
+# Windows path: %USERPROFILE%\.ssh\config
+
+Host airgap-ubuntu-01
+    HostName 10.0.4.21
+    User adminlocal
+    IdentityFile ~/.ssh/id_ed25519
+    IdentitiesOnly yes
+    ServerAliveInterval 30
+    ServerAliveCountMax 3
+
+# Then in VS Code:
+#   F1 -> Remote-SSH: Connect to Host... -> airgap-ubuntu-01

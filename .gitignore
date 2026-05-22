@@ -1,0 +1,32 @@
+# OS generated files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor and IDE settings
+.vscode/
+.idea/
+*.code-workspace
+
+# PowerShell local artifacts
+.history/
+
+# Logs and temporary files
+*.log
+logs/
+*.tmp
+*.temp
+*.bak
+*~
+*.swp
+*.swo
+
+# Environment and secret files
+.env
+.env.*
+*.secret
+*.key
+
+# Generated bundle content
+/output/
+/staging/
