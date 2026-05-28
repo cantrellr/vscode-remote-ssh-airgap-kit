@@ -7,18 +7,18 @@
       - Has Internet access
       - Has the exact target VS Code build installed
 
-    The script:
-      1. Reads the local VS Code version + commit hash from `code --version`
-      2. Copies the specified VS Code installer into the bundle
-            3. Downloads the configured VSIX packages (or uses existing local VSIX files)
-                 and copies them into the bundle
-      4. Downloads the exact matching VS Code Server tarball for Linux x64 by commit hash
-      5. Generates a JSON manifest and SHA256 checksums
-      6. Creates a ZIP package suitable for transfer into an air-gapped network
+        The script:
+            1. Reads the local VS Code version + commit hash from `code --version`
+            2. Copies the specified VS Code installer into the bundle
+            3. Downloads configured VSIX packages (or uses existing local VSIX files)
+            4. Downloads matching VS Code Server payload(s) by commit hash
+            5. Downloads matching Remote-SSH exec CLI payload(s) by commit hash
+            6. Generates a JSON manifest and SHA256 checksums
+            7. Creates a ZIP package suitable for transfer into an air-gapped network
 
 .NOTES
     Author: Air-gap packaging helper
-    Target pattern: Windows VS Code client -> Linux x64 SSH hosts
+    Target pattern: Windows VS Code client -> Linux SSH hosts
 #>
 
 [CmdletBinding()]
@@ -237,6 +237,24 @@ function Sync-VsixPackages {
         Invoke-DownloadFile -Url $spec.Url -DestinationPath $destination
         Write-Success "VSIX downloaded: $($spec.FileName)"
     }
+}
+
+function Get-CliArtifactsForServerArtifacts {
+    param([string[]]$SelectedServerArtifacts)
+
+    $artifactMap = @{
+        'server-linux-x64'   = 'cli-alpine-x64'
+        'server-linux-arm64' = 'cli-alpine-arm64'
+    }
+
+    $cliArtifacts = New-Object System.Collections.Generic.List[string]
+    foreach ($serverArtifact in @($SelectedServerArtifacts)) {
+        if ($artifactMap.ContainsKey($serverArtifact)) {
+            $cliArtifacts.Add($artifactMap[$serverArtifact]) | Out-Null
+        }
+    }
+
+    return @($cliArtifacts | Sort-Object -Unique)
 }
 
 function Get-VSCodeIdentity {
@@ -594,6 +612,33 @@ foreach ($artifact in $ServerArtifacts) {
     Write-Success "Server payload downloaded: $serverFileName"
 }
 
+$cliArtifacts = Get-CliArtifactsForServerArtifacts -SelectedServerArtifacts $ServerArtifacts
+$downloadedCli = @()
+foreach ($cliArtifact in $cliArtifacts) {
+    $cliFileName = "vscode-cli-$cliArtifact-$($identity.Commit).tar.gz"
+    $cliDest = Join-Path $serverDir $cliFileName
+    $url = "https://update.code.visualstudio.com/commit:$($identity.Commit)/$cliArtifact/stable"
+
+    Write-Info "Downloading exec CLI payload '$cliArtifact' for commit $($identity.Commit)..."
+    try {
+        Invoke-DownloadFile -Url $url -DestinationPath $cliDest
+    }
+    catch {
+        throw "Failed to download '$cliArtifact' from '$url'. $($_.Exception.Message)"
+    }
+
+    if (-not (Test-Path -LiteralPath $cliDest -PathType Leaf)) {
+        throw "CLI download did not produce a file: $cliDest"
+    }
+
+    $downloadedCli += [PSCustomObject]@{
+        Artifact = $cliArtifact
+        FileName = $cliFileName
+        Url      = $url
+    }
+    Write-Success "Exec CLI payload downloaded: $cliFileName"
+}
+
 $offlineReadme = @'
 # Offline install summary
 
@@ -646,6 +691,7 @@ $manifest = [PSCustomObject]@{
     }
     vsixFiles     = $copiedVsix
     serverPayloads = $downloadedServers
+    cliPayloads   = $downloadedCli
     recommendedOfflineSettings = [PSCustomObject]@{
         'update.mode' = 'none'
         'extensions.autoUpdate' = $false

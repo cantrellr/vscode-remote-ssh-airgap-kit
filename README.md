@@ -12,7 +12,12 @@ The workflow is optimized for:
 
 ## Why a bundle is needed
 
-Remote-SSH requires more than the desktop editor and local extension. At first SSH connection, VS Code also needs a version-matched VS Code Server payload on the remote host. In an isolated network, that server payload cannot be downloaded at connection time, so it must be staged in advance.
+Remote-SSH requires more than the desktop editor and local extension. At first SSH connection, VS Code needs:
+
+- A version-matched VS Code Server payload on the remote host
+- A version-matched Remote-SSH exec CLI bootstrap binary on the remote host
+
+In an isolated network, these cannot be downloaded at connection time, so they must be staged in advance.
 
 ## Repository-local working folders
 
@@ -37,6 +42,7 @@ vscode-remote-ssh-airgap-bundle-<version>-<commit12>/
 │   └── ms-vscode-remote.remote-ssh-edit*.vsix
 ├── servers/
 │   └── vscode-server-<artifact>-<commit>.tar.gz
+│   └── vscode-cli-<artifact>-<commit>.tar.gz
 ├── manifest/
 │   ├── bundle-manifest.json
 │   └── SHA256SUMS.txt
@@ -115,10 +121,11 @@ Notes:
 - If OutputDirectory is omitted, the script defaults to `<repo-root>/output/production-YYYYMMDD`.
 - VSIX packages listed in `VsixExtensionIds` are downloaded into `VsixDirectory` before bundling.
 - To disable automatic VSIX download and use only existing local `.vsix` files, pass `-VsixExtensionIds @()`.
-- Downloads prefer `curl.exe`, then fall back to `Start-BitsTransfer`, then `Invoke-WebRequest`.
+- Downloads prefer `aria2c.exe`, then fall back to `Start-BitsTransfer`, then `Invoke-WebRequest`.
 - If VsixDirectory does not exist, the script creates it.
 - If no VSIX files are present after the download step, packaging continues with a warning.
 - ServerArtifacts accepts server-linux-x64 and server-linux-arm64.
+- Matching exec CLI payloads are downloaded automatically for selected server artifacts.
 
 ## Air-gapped client workflow
 
@@ -154,6 +161,12 @@ Current preload path:
 ~/.vscode-server/cli/servers/Stable-<commit>/server
 ```
 
+Exec CLI preload path:
+
+```text
+~/.vscode-server/code-<commit>
+```
+
 Optional legacy compatibility layout:
 
 ```bash
@@ -166,9 +179,19 @@ Optional legacy compatibility layout:
 
 ## Operational rules that matter
 
-- Package VS Code client, Remote-SSH extensions, and server payload as one release set.
+- Package VS Code client, Remote-SSH extensions, server payload, and exec CLI payload as one release set.
 - Stage server payload per remote Linux user account.
 - Build a new bundle whenever you update VS Code in the air-gapped environment.
+
+## Troubleshooting: vscode_cli downloads
+
+If Remote-SSH still tries to download files such as `vscode_cli_alpine_x64_cli.tar.gz`, it usually means the per-commit exec CLI binary was not preloaded for that SSH user.
+
+Check these on the remote host for the connecting user:
+
+1. `~/.vscode-server/code-<commit>` exists and is executable.
+2. `~/.vscode-server/cli/servers/Stable-<commit>/server` exists.
+3. The `<commit>` matches `code --version` line 2 on the Windows client.
 
 ## Files in this kit
 

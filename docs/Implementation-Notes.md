@@ -6,8 +6,9 @@ The workflow intentionally treats VS Code as a release bundle:
 
 1. Windows desktop installer
 2. Remote-SSH VSIX files
-3. VS Code Server tarball for the exact editor commit
-4. SHA256 manifest
+3. VS Code Server payload(s) for the exact editor commit
+4. Remote-SSH exec CLI payload(s) for the exact editor commit
+5. SHA256 manifest
 
 That keeps package promotion and offline deployment deterministic.
 
@@ -32,6 +33,13 @@ The packager supports these server payload IDs:
 - `server-linux-arm64`
 
 Each selected artifact is downloaded as `vscode-server-<artifact>-<commit>.tar.gz`.
+
+For exec-server mode (default in modern Remote-SSH), matching CLI payloads are also downloaded automatically:
+
+- `server-linux-x64` -> `cli-alpine-x64`
+- `server-linux-arm64` -> `cli-alpine-arm64`
+
+CLI payloads are stored as `vscode-cli-<artifact>-<commit>.tar.gz`.
 
 ## VSIX handling
 
@@ -77,6 +85,12 @@ Modern Remote-SSH logs commonly reference paths shaped like:
 ~/.vscode-server/cli/servers/Stable-<commit>/server
 ```
 
+In exec-server mode, Remote-SSH also expects a per-commit CLI binary at:
+
+```text
+~/.vscode-server/code-<commit>
+```
+
 The server preload script targets that layout first. It can also create the older:
 
 ```text
@@ -97,7 +111,14 @@ After offline install:
 ~/.vscode-server/cli/servers/Stable-<commit>/server
 ```
 
+1. Confirm the target user's Linux home directory contains a commit-pinned CLI binary, typically:
+
+```text
+~/.vscode-server/code-<commit>
+```
+
 - Connect from VS Code using `Remote-SSH: Connect to Host...`.
+- If Remote-SSH still tries to download `vscode_cli_*_cli.tar.gz`, verify the expected CLI artifact for that remote architecture was packaged and preloaded.
 - If Remote-SSH still tries to download server payloads, verify the commit in the bundle manifest matches the editor client actually running in the air-gapped network.
 
 ## Repository-local transient paths
