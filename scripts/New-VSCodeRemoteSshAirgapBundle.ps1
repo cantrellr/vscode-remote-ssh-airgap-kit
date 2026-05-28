@@ -96,26 +96,45 @@ function Invoke-DownloadFile {
         Remove-Item -LiteralPath $DestinationPath -Force
     }
 
-    $curl = Get-Command 'curl.exe' -ErrorAction SilentlyContinue
-    if ($curl) {
-        Write-Info "Downloading with curl.exe"
+    $destinationFileName = Split-Path -Path $DestinationPath -Leaf
+    if (-not $destinationDirectory) {
+        $destinationDirectory = (Get-Location).Path
+    }
+
+    $aria2 = Get-Command 'aria2c.exe' -ErrorAction SilentlyContinue
+    if ($aria2) {
+        Write-Info "Downloading with aria2c.exe"
         try {
-            $curlArgs = @('--fail', '--location', '--retry', '3', '--retry-delay', '2', '--output', $DestinationPath, $Url)
-            & $curl.Source @curlArgs
-            $curlExitCode = $LASTEXITCODE
-            if ($curlExitCode -eq 0 -and (Test-Path -LiteralPath $DestinationPath -PathType Leaf)) {
+            $ariaArgs = @(
+                '--allow-overwrite=true'
+                '--auto-file-renaming=false'
+                '--continue=true'
+                '--file-allocation=none'
+                '--max-connection-per-server=16'
+                '--split=16'
+                '--min-split-size=1M'
+                '--max-tries=3'
+                '--retry-wait=2'
+                '--timeout=30'
+                '--dir', $destinationDirectory
+                '--out', $destinationFileName
+                $Url
+            )
+            & $aria2.Source @ariaArgs
+            $ariaExitCode = $LASTEXITCODE
+            if ($ariaExitCode -eq 0 -and (Test-Path -LiteralPath $DestinationPath -PathType Leaf)) {
                 return
             }
-            $downloadErrors.Add("curl.exe failed with exit code $curlExitCode.") | Out-Null
+            $downloadErrors.Add("aria2c.exe failed with exit code $ariaExitCode.") | Out-Null
         } catch {
-            $downloadErrors.Add("curl.exe error: $($_.Exception.Message)") | Out-Null
+            $downloadErrors.Add("aria2c.exe error: $($_.Exception.Message)") | Out-Null
         }
 
         if (Test-Path -LiteralPath $DestinationPath -PathType Leaf) {
             Remove-Item -LiteralPath $DestinationPath -Force -ErrorAction SilentlyContinue
         }
     } else {
-        $downloadErrors.Add('curl.exe not found on PATH.') | Out-Null
+        $downloadErrors.Add('aria2c.exe not found on PATH.') | Out-Null
     }
 
     $bits = Get-Command 'Start-BitsTransfer' -ErrorAction SilentlyContinue

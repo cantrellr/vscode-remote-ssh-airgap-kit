@@ -59,7 +59,7 @@ If `-OutputDirectory` is omitted, the script defaults to `<repo-root>/output/pro
 
 For installer, VSIX, and server payload downloads, the script uses this order:
 
-1. `curl.exe`
+1. `aria2c.exe` (parallel segmented download)
 2. `Start-BitsTransfer`
 3. `Invoke-WebRequest`
 
