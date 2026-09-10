@@ -70,7 +70,7 @@ You can override this list with `-VsixExtensionIds`.
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass -Force
 .\scripts\New-VSCodeRemoteSshAirgapBundle.ps1 `
-  -VsCodeInstallerPath 'E:\Staging\VSCodeUserSetup-x64.exe' `
+  -VsCodeInstallerPath 'E:\Staging\VSCodeUserSetup-x64-1.137.0.exe' `
   -VsixDirectory 'E:\Staging\VSCode-VSIX' `
   -OutputDirectory 'E:\Staging\Output'
 ```
